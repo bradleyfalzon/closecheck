@@ -143,12 +143,45 @@ func (v *visitor) Visit(node ast.Node) ast.Visitor {
 			}
 		}
 	case *ast.CallExpr:
+		// closes if a Close method is called
 		if fun, ok := n.Fun.(*ast.SelectorExpr); ok {
 			if fun.Sel.Name == "Close" {
 				// selector is a close, note the ident that's closed
 				v.addClosed(v.pi.ObjectOf(fun.X.(*ast.Ident)).Pos())
 			}
 		}
+	case *ast.ExprStmt:
+		// closes if it's passed as an argument to a function that accepts an io.Closer
+		if fun, ok := n.X.(*ast.CallExpr); ok {
+			tuples := v.pi.ObjectOf(fun.Fun.(*ast.Ident)).Type().(*types.Signature).Params()
+
+			// Loop through each function's parameters
+			for i := 0; i < tuples.Len(); i++ {
+				iface, ok := tuples.At(i).Type().Underlying().(*types.Interface)
+				if !ok {
+					continue
+				}
+				if interfaceCloses(iface) {
+					// Function's argument requires an io.Closer, it will likely close it
+					argIdent := fun.Args[i].(*ast.Ident)
+					if argIdent != nil {
+						v.addClosed(v.pi.ObjectOf(argIdent).Pos())
+					}
+				}
+			}
+
+		}
 	}
 	return v
+}
+
+// interfaceCloses returns true if an interface has a Close() method or
+// embeds an interface that does, returns false otherwise.
+func interfaceCloses(iface *types.Interface) bool {
+	for i := 0; i < iface.NumMethods(); i++ {
+		if iface.Method(i).Name() == "Close" {
+			return true
+		}
+	}
+	return false
 }
