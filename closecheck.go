@@ -14,10 +14,7 @@ var ioCloser *types.Interface
 func init() {
 	var conf loader.Config
 	conf.Import("io")
-	prog, err := conf.Load()
-	if err != nil {
-		panic(err)
-	}
+	prog, _ := conf.Load()
 	ioCloser = prog.Imported["io"].Pkg.Scope().Lookup("Closer").Type().Underlying().(*types.Interface)
 }
 

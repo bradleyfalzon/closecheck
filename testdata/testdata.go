@@ -1,12 +1,11 @@
-package main
+package testdata
 
 import (
 	"io"
 	"os"
 )
 
-func main() {
-
+func testdata() {
 	{
 		file, _ := os.Open("/tmp/closecheck")
 		_ = file.Close()
@@ -19,16 +18,33 @@ func main() {
 
 	{
 		file, _ := os.Open("/tmp/closecheck")
-		closer(file, nil)
+		closer(file)
 	}
 
 	{
 		file, _ := os.Open("/tmp/closecheck")
-		closer(nil, file)
+		readCloser(file)
 	}
 
+	{
+		// Not closed
+		file, _ := os.Open("/tmp/closecheck")
+		reader(file)
+	}
+
+	{
+		// Not closed
+		file, _ := os.Open("/tmp/closecheck")
+		osFile(file)
+	}
 }
 
 // closer is an example func that would likely call a close method as it
 // accepts an io.Closer
-func closer(_ io.Closer, _ io.ReadCloser) {}
+func closer(_ io.Closer) {}
+
+func readCloser(_ io.ReadCloser) {}
+
+func reader(_ io.Reader) {}
+
+func osFile(_ *os.File) {}
