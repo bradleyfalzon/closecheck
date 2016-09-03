@@ -1,6 +1,8 @@
 package closecheck
 
 import (
+	"go/token"
+	"reflect"
 	"testing"
 
 	"golang.org/x/tools/go/loader"
@@ -14,10 +16,10 @@ func TestCheck(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expected := 2
+	expected := []token.Pos{344, 422}
 
 	positions := Check(prog.Created[0])
-	if len(positions) != expected {
-		t.Errorf("Found %v uncheck positions, expected %d", len(positions), expected)
+	if !reflect.DeepEqual(positions, expected) {
+		t.Errorf("got %v unchecked positions, expected %v", positions, expected)
 	}
 }
