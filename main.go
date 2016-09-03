@@ -11,47 +11,35 @@ import (
 	"golang.org/x/tools/go/loader"
 )
 
-func main() {
-	path := "github.com/bradleyfalzon/closecheck/testdata"
+// ioCloser used to test if a type implements io.Closer using types.Implements()
+var ioCloser *types.Interface
 
-	log.Println("Checking:", path)
-	ok, err := checkImport(path)
+func init() {
+	var conf loader.Config
+	conf.Import("io")
+	prog, err := conf.Load()
 	if err != nil {
-		log.Fatalf("Could not check %s: %s", path, err)
+		panic(err)
 	}
-
-	if !ok {
-		os.Exit(1)
-	}
+	ioCloser = prog.Imported["io"].Pkg.Scope().Lookup("Closer").Type().Underlying().(*types.Interface)
 }
 
-func checkImport(path string) (ok bool, err error) {
+func main() {
 	var conf loader.Config
-
-	// Swap to from args, to support ./..., importPath, or . ?
-	conf.Import(path)
-
-	// import io to use io.Closer in types.Implements()
-	conf.Import("io")
+	if _, err := conf.FromArgs(os.Args[1:], true); err != nil {
+		fmt.Fprintf(os.Stderr, "Could not check %v: %s\n", os.Args[1:], err)
+		os.Exit(1)
+	}
 
 	prog, err := conf.Load()
 	if err != nil {
-		return false, err
+		fmt.Fprintf(os.Stderr, "Could not check %v: %s\n", os.Args[1:], err)
+		os.Exit(1)
 	}
 
-	checker := checker{}
-	for ident, def := range prog.Imported["io"].Info.Defs {
-		if ident.Name == "Closer" {
-			// Surely this can be simplified ?!?!?! - yes see types.Universe.Lookup("error").Type().Underlying().(*types.Interface)
-			checker.closer = def.(*types.TypeName).Type().(*types.Named).Underlying().(*types.Interface)
-			break
-		}
-	}
-	delete(prog.Imported, "io")
-
-	ok = true
+	var ok = true
 	for _, pi := range prog.Imported {
-		notClosed := checker.checkPkgInfo(pi)
+		notClosed := Check(pi)
 		for _, pos := range notClosed {
 			ok = false
 			// TODO add ident (or line?)
@@ -60,16 +48,14 @@ func checkImport(path string) (ok bool, err error) {
 		}
 	}
 
-	return ok, nil
+	if !ok {
+		os.Exit(1)
+	}
 }
 
-type checker struct {
-	closer *types.Interface // stdlib io package for use in types.Implements
-}
-
-// checkPkgInfo checks a package info and returns non nil slice of token.Pos if
-// any io.Closers are not closed
-func (c checker) checkPkgInfo(pi *loader.PackageInfo) []token.Pos {
+// Check a package info and returns non nil slice of token.Pos if any
+// io.Closers are not closed
+func Check(pi *loader.PackageInfo) []token.Pos {
 	if pi.Errors != nil {
 		log.Println("Cannot check package:", pi.Pkg.Name())
 		for _, err := range pi.Errors {
@@ -85,7 +71,6 @@ func (c checker) checkPkgInfo(pi *loader.PackageInfo) []token.Pos {
 
 	v := &visitor{
 		pi:     pi,
-		closer: c.closer,
 		closed: make(map[token.Pos]bool),
 	}
 
@@ -98,7 +83,6 @@ func (c checker) checkPkgInfo(pi *loader.PackageInfo) []token.Pos {
 }
 
 type visitor struct {
-	closer  *types.Interface
 	pi      *loader.PackageInfo
 	closers []token.Pos        // closers found
 	closed  map[token.Pos]bool // closers closed, just the presence in map is checked
@@ -133,7 +117,7 @@ func (v *visitor) Visit(node ast.Node) ast.Visitor {
 			// Get the underlying type of the assigned ident
 			lhsType := v.pi.ObjectOf(lhs.(*ast.Ident)).Type()
 
-			if types.Implements(lhsType, v.closer) {
+			if types.Implements(lhsType, ioCloser) {
 				// lhs implements closer, this will need to be closed
 				v.addCloser(lhs.Pos())
 			}
