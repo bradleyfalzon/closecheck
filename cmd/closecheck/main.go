@@ -12,14 +12,12 @@ import (
 func main() {
 	var conf loader.Config
 	if _, err := conf.FromArgs(os.Args[1:], true); err != nil {
-		fmt.Fprintf(os.Stderr, "Could not check %v: %s\n", os.Args[1:], err)
-		os.Exit(1)
+		log.Fatalf("Could not check %v: %s\n", os.Args[1:], err)
 	}
 
 	prog, err := conf.Load()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not check %v: %s\n", os.Args[1:], err)
-		os.Exit(1)
+		log.Fatalf("Could not check %v: %s\n", os.Args[1:], err)
 	}
 
 	var ok = true
