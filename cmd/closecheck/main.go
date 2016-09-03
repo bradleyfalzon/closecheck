@@ -34,7 +34,7 @@ func main() {
 			log.Fatalf("Cannot check package %s: not error free", pi.Pkg.Name())
 		}
 
-		notClosed := closecheck.Check(pi)
+		notClosed := closecheck.Check(pi, prog.Fset)
 		for _, pos := range notClosed {
 			ok = false
 			// TODO add ident (or line?)

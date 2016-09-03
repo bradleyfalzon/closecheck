@@ -18,7 +18,7 @@ func TestCheck(t *testing.T) {
 
 	expected := []token.Pos{344, 422}
 
-	positions := Check(prog.Created[0])
+	positions := Check(prog.Created[0], prog.Fset)
 	if !reflect.DeepEqual(positions, expected) {
 		t.Errorf("got %v unchecked positions, expected %v", positions, expected)
 	}

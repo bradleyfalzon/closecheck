@@ -37,6 +37,12 @@ func testdata() {
 		file, _ := os.Open("/tmp/closecheck")
 		osFile(file)
 	}
+
+	{
+		var file *os.File
+		file, _ = os.Open("/tmp/closecheck")
+		defer file.Close()
+	}
 }
 
 // closer is an example func that would likely call a close method as it
