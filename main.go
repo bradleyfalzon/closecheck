@@ -1,29 +1,31 @@
 package main
 
 import (
+	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
 	"log"
+	"os"
 
 	"golang.org/x/tools/go/loader"
 )
 
 func main() {
-
 	path := "github.com/bradleyfalzon/closecheck/testdata"
 
 	log.Println("Checking:", path)
-	err := checkImport(path)
+	ok, err := checkImport(path)
 	if err != nil {
 		log.Fatalf("Could not check %s: %s", path, err)
 	}
 
-	log.Println("All done")
+	if !ok {
+		os.Exit(1)
+	}
 }
 
-func checkImport(path string) error {
-
+func checkImport(path string) (ok bool, err error) {
 	var conf loader.Config
 
 	// Swap to from args, to support ./..., importPath, or . ?
@@ -34,32 +36,31 @@ func checkImport(path string) error {
 
 	prog, err := conf.Load()
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	checker := checker{}
 	for ident, def := range prog.Imported["io"].Info.Defs {
 		if ident.Name == "Closer" {
-			// Surely this can be simplified ?!?!?!
+			// Surely this can be simplified ?!?!?! - yes see types.Universe.Lookup("error").Type().Underlying().(*types.Interface)
 			checker.closer = def.(*types.TypeName).Type().(*types.Named).Underlying().(*types.Interface)
 			break
 		}
 	}
 	delete(prog.Imported, "io")
 
-	log.Printf("Created len %d", len(prog.Created))
-	log.Printf("Imported len %d", len(prog.Imported))
-	for name, pi := range prog.Imported {
-		log.Printf("checking %s: ", name)
+	ok = true
+	for _, pi := range prog.Imported {
 		notClosed := checker.checkPkgInfo(pi)
-		log.Printf("%d not closed", len(notClosed))
+		for _, pos := range notClosed {
+			ok = false
+			// TODO add ident (or line?)
+			// TODO add relative path not abs
+			fmt.Fprintf(os.Stderr, "%s: is not closed\n", prog.Fset.Position(pos))
+		}
 	}
-	log.Printf("All Packages len %d", len(prog.AllPackages))
-	//for name := range prog.AllPackages {
-	//log.Printf("\t%s", name)
-	//}
 
-	return nil
+	return ok, nil
 }
 
 type checker struct {
@@ -69,9 +70,8 @@ type checker struct {
 // checkPkgInfo checks a package info and returns non nil slice of token.Pos if
 // any io.Closers are not closed
 func (c checker) checkPkgInfo(pi *loader.PackageInfo) []token.Pos {
-	log.Println("checkPkgInfo")
 	if pi.Errors != nil {
-		log.Println("Cannot check package:")
+		log.Println("Cannot check package:", pi.Pkg.Name())
 		for _, err := range pi.Errors {
 			log.Printf("\t%s\n", err)
 		}
@@ -79,10 +79,9 @@ func (c checker) checkPkgInfo(pi *loader.PackageInfo) []token.Pos {
 	}
 
 	if !pi.TransitivelyErrorFree {
-		log.Println("Cannot check package: not error free")
+		log.Printf("Cannot check package %s: not error free", pi.Pkg.Name())
 		return nil
 	}
-	log.Println("no errors")
 
 	v := &visitor{
 		pi:     pi,
@@ -106,19 +105,16 @@ type visitor struct {
 }
 
 func (v *visitor) addCloser(pos token.Pos) {
-	log.Println("addCloser:", pos)
 	v.closers = append(v.closers, pos)
 }
 
 func (v *visitor) addClosed(pos token.Pos) {
-	log.Println("addClosed:", pos)
 	v.closed[pos] = true
 }
 
 func (v *visitor) findNotClosed() []token.Pos {
 	var notClosed []token.Pos
 	for _, pos := range v.closers {
-		log.Println("checking pos:", pos)
 		if _, ok := v.closed[pos]; !ok {
 			notClosed = append(notClosed, pos)
 		}
