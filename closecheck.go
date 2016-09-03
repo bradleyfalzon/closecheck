@@ -1,12 +1,9 @@
-package main
+package closecheck
 
 import (
-	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
-	"log"
-	"os"
 
 	"golang.org/x/tools/go/loader"
 )
@@ -24,62 +21,19 @@ func init() {
 	ioCloser = prog.Imported["io"].Pkg.Scope().Lookup("Closer").Type().Underlying().(*types.Interface)
 }
 
-func main() {
-	var conf loader.Config
-	if _, err := conf.FromArgs(os.Args[1:], true); err != nil {
-		fmt.Fprintf(os.Stderr, "Could not check %v: %s\n", os.Args[1:], err)
-		os.Exit(1)
-	}
-
-	prog, err := conf.Load()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not check %v: %s\n", os.Args[1:], err)
-		os.Exit(1)
-	}
-
-	var ok = true
-	for _, pi := range prog.Imported {
-		notClosed := Check(pi)
-		for _, pos := range notClosed {
-			ok = false
-			// TODO add ident (or line?)
-			// TODO add relative path not abs
-			fmt.Fprintf(os.Stderr, "%s: is not closed\n", prog.Fset.Position(pos))
-		}
-	}
-
-	if !ok {
-		os.Exit(1)
-	}
-}
-
-// Check a package info and returns non nil slice of token.Pos if any
-// io.Closers are not closed
+// Check an error free loader.PackageInfo and returns non nil slice of
+// token.Pos if any io.Closers are not closed.
 func Check(pi *loader.PackageInfo) []token.Pos {
-	if pi.Errors != nil {
-		log.Println("Cannot check package:", pi.Pkg.Name())
-		for _, err := range pi.Errors {
-			log.Printf("\t%s\n", err)
-		}
-		return nil
-	}
-
-	if !pi.TransitivelyErrorFree {
-		log.Printf("Cannot check package %s: not error free", pi.Pkg.Name())
-		return nil
-	}
-
 	v := &visitor{
 		pi:     pi,
 		closed: make(map[token.Pos]bool),
 	}
-
 	for _, file := range pi.Files {
 		for _, decl := range file.Decls {
 			ast.Walk(v, decl)
 		}
 	}
-	return v.findNotClosed()
+	return v.notClosed()
 }
 
 type visitor struct {
@@ -96,7 +50,7 @@ func (v *visitor) addClosed(pos token.Pos) {
 	v.closed[pos] = true
 }
 
-func (v *visitor) findNotClosed() []token.Pos {
+func (v *visitor) notClosed() []token.Pos {
 	var notClosed []token.Pos
 	for _, pos := range v.closers {
 		if _, ok := v.closed[pos]; !ok {
