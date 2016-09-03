@@ -2,7 +2,6 @@ package closecheck
 
 import (
 	"go/token"
-	"reflect"
 	"testing"
 
 	"golang.org/x/tools/go/loader"
@@ -16,10 +15,21 @@ func TestCheck(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expected := []token.Pos{344, 422}
+	expected := map[token.Pos]bool{
+		345: true, 423: true,
+	}
 
-	positions := Check(prog.Created[0], prog.Fset)
-	if !reflect.DeepEqual(positions, expected) {
-		t.Errorf("got %v unchecked positions, expected %v", positions, expected)
+	objs := Check(prog, prog.Created[0])
+
+	for _, obj := range objs {
+		if _, ok := expected[obj.Pos()]; !ok {
+			t.Errorf("Expected %q (pos %v) to be closed", obj, obj.Pos())
+			continue
+		}
+		delete(expected, obj.Pos())
+	}
+
+	for pos := range expected {
+		t.Errorf("Expected pos %v to be unclosed", pos)
 	}
 }

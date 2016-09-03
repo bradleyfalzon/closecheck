@@ -6,7 +6,11 @@ import (
 	"go/token"
 	"go/types"
 
+	"golang.org/x/tools/go/callgraph"
+	"golang.org/x/tools/go/callgraph/cha"
 	"golang.org/x/tools/go/loader"
+	"golang.org/x/tools/go/ssa"
+	"golang.org/x/tools/go/ssa/ssautil"
 )
 
 // ioCloser used to test if a type implements io.Closer using types.Implements()
@@ -21,43 +25,165 @@ func init() {
 
 // Check an error free loader.PackageInfo and returns non nil slice of
 // token.Pos if any io.Closers are not closed.
-func Check(pi *loader.PackageInfo, fset *token.FileSet) []token.Pos {
+func Check(lprog *loader.Program, pi *loader.PackageInfo) []obj {
 	v := &visitor{
+		lprog:  lprog,
 		pi:     pi,
-		fset:   fset,
 		closed: make(map[token.Pos]bool),
 	}
+
 	for _, file := range pi.Files {
 		for _, decl := range file.Decls {
 			ast.Walk(v, decl)
 		}
 	}
+
+	if len(v.notClosed()) == 0 {
+		return v.notClosed()
+	}
+
+	// Some variables weren't closed, lets check the callstack, perhaps
+	// they passed into a function
+
+	prog := ssautil.CreateProgram(v.lprog, 0)
+
+	prog.Build()
+
+	// Using cha as it supports applications without main or test
+	// if there's _edge_ cases in the graph algorithm (see what i did there)
+	// we could switch to rta and require main/tests
+	cg := cha.CallGraph(prog)
+	cg.DeleteSyntheticNodes()
+
+	// Given a list of source positions, find which functions they're passed into
+	// which will form the start node for the callgraph search
+
+	// Walk the ast again, finding all calls to functions, check to see if the
+	// arguments to those functions are the unclosed object's we're still tracking.
+	// If so, note the object's position and the function definition's position.
+
+	var poses [][2]token.Pos
+	for _, file := range pi.Files {
+		for _, decl := range file.Decls {
+			ast.Inspect(decl, func(node ast.Node) bool {
+				ce, ok := node.(*ast.CallExpr)
+				if !ok {
+					// We're looking for function calls only
+					return true
+				}
+
+				var funcPos token.Pos
+				switch ce.Fun.(type) {
+				case *ast.Ident, *ast.SelectorExpr:
+					funcPos = v.pi.ObjectOf(callerIdent(ce.Fun)).Pos()
+				case *ast.FuncLit:
+					funcPos = ce.Fun.(*ast.FuncLit).Type.Func
+				default:
+					// Non function, likely ok to ignore it
+					return true
+				}
+
+				for _, arg := range ce.Args {
+					if _, ok := arg.(*ast.Ident); !ok {
+						continue
+					}
+					argObj := v.pi.ObjectOf(arg.(*ast.Ident))
+					// Check if one of the function's arguments is one of the unclosed
+					// objects we're still trying check
+					for _, obj := range v.notClosed() {
+						if argObj == obj.types {
+							poses = append(poses, [2]token.Pos{obj.types.Pos(), funcPos})
+						}
+					}
+				}
+				return true
+			})
+		}
+	}
+
+	// Given an object's position, a function's definition position, and an array
+	// of closed object positions, assume that the source object may have been the
+	// object being closed in the target function. This isn't precise, and would
+	// assume something is closed if any of the closed positions were for
+	// different objects.
+	//
+	// A better way maybe to track a graph/set of idents, determining their types
+	// def and following them through the program.
+
+	pkg := prog.Package(v.pi.Pkg)
+	if pkg == nil {
+		panic(fmt.Errorf("no SSA package"))
+	}
+
+	for _, sourcePos := range poses {
+		_, sourcePath, _ := v.lprog.PathEnclosingInterval(sourcePos[1], sourcePos[1])
+		if !ssa.HasEnclosingFunction(pkg, sourcePath) {
+			// this position is not inside a function
+			continue
+		}
+
+		source := ssa.EnclosingFunction(pkg, sourcePath)
+		if source == nil {
+			panic(fmt.Errorf("no SSA function built for this location (dead code?)"))
+		}
+
+		for targetPos := range v.closed {
+			_, targetPath, _ := v.lprog.PathEnclosingInterval(targetPos, targetPos)
+			if !ssa.HasEnclosingFunction(pkg, targetPath) {
+				panic(fmt.Errorf("this position is not inside a function"))
+			}
+
+			target := ssa.EnclosingFunction(pkg, targetPath)
+			if target == nil {
+				panic(fmt.Errorf("no SSA function built for this location (dead code?)"))
+			}
+
+			isEnd := func(n *callgraph.Node) bool { return n.Func == target }
+
+			if cp := callgraph.PathSearch(cg.CreateNode(source), isEnd); cp != nil {
+				// we have a path to a closer
+				v.addClosed(sourcePos[0])
+			}
+		}
+	}
+
 	return v.notClosed()
 }
 
 type visitor struct {
-	pi      *loader.PackageInfo
-	fset    *token.FileSet
-	closers []token.Pos        // closers found
-	closed  map[token.Pos]bool // closers closed, just the presence in map is checked
+	lprog  *loader.Program
+	pi     *loader.PackageInfo
+	objs   []obj              // objects that need to be checked for closing
+	closed map[token.Pos]bool // closers closed, just the presence in map is checked
 }
 
-func (v *visitor) addCloser(pos token.Pos) {
-	v.closers = append(v.closers, pos)
+func (v *visitor) walk(pi *loader.PackageInfo) {
+}
+
+type obj struct {
+	types     types.Object
+	assignPos token.Pos
+}
+
+func (o obj) Pos() token.Pos {
+	return o.assignPos
+}
+
+func (v *visitor) addObj(obj obj) {
+	v.objs = append(v.objs, obj)
 }
 
 func (v *visitor) addClosed(pos token.Pos) {
 	v.closed[pos] = true
 }
 
-func (v *visitor) notClosed() []token.Pos {
-	var notClosed []token.Pos
-	for _, pos := range v.closers {
-		if _, ok := v.closed[pos]; !ok {
-			notClosed = append(notClosed, pos)
+func (v *visitor) notClosed() (objs []obj) {
+	for _, obj := range v.objs {
+		if _, ok := v.closed[obj.types.Pos()]; !ok {
+			objs = append(objs, obj)
 		}
 	}
-	return notClosed
+	return objs
 }
 
 func (v *visitor) Visit(node ast.Node) ast.Visitor {
@@ -76,7 +202,7 @@ func (v *visitor) Visit(node ast.Node) ast.Visitor {
 			}
 			if types.Implements(def.Type(), ioCloser) {
 				// lhs implements closer, this will need to be closed
-				v.addCloser(def.Pos())
+				v.addObj(obj{types: def, assignPos: lhs.Pos()})
 			}
 		}
 	case *ast.CallExpr:
@@ -84,6 +210,8 @@ func (v *visitor) Visit(node ast.Node) ast.Visitor {
 		if fun, ok := n.Fun.(*ast.SelectorExpr); ok {
 			if fun.Sel.Name == "Close" {
 				// selector is a close, note the ident that's closed
+
+				// Anything defined at def.Pos() is closed
 				def := v.exprDef(fun.X)
 				v.addClosed(def.Pos())
 			}
@@ -133,6 +261,17 @@ func (v *visitor) exprDef(e ast.Expr) types.Object {
 	default:
 		panic(fmt.Sprintf("unexpected type %T", e))
 	}
+}
+
+// Given a ast.CallExpr find the ident of the function being called
+func callerIdent(e ast.Expr) *ast.Ident {
+	switch f := e.(type) {
+	case *ast.SelectorExpr:
+		return callerIdent(f.Sel)
+	case *ast.Ident:
+		return f
+	}
+	panic(fmt.Sprintf("unexpected type %T", e))
 }
 
 // interfaceCloses returns true if an interface has a Close() method or

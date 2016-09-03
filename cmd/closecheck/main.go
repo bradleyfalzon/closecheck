@@ -34,12 +34,12 @@ func main() {
 			log.Fatalf("Cannot check package %s: not error free", pi.Pkg.Name())
 		}
 
-		notClosed := closecheck.Check(pi, prog.Fset)
-		for _, pos := range notClosed {
+		notClosed := closecheck.Check(prog, pi)
+		for _, obj := range notClosed {
 			ok = false
 			// TODO add ident (or line?)
 			// TODO add relative path not abs
-			fmt.Fprintf(os.Stderr, "%s: is not closed\n", prog.Fset.Position(pos))
+			fmt.Fprintf(os.Stderr, "%s: is not closed\n", prog.Fset.Position(obj.Pos()))
 		}
 	}
 
