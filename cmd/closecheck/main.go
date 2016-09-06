@@ -1,8 +1,9 @@
 package main
 
 import (
+	"flag"
 	"fmt"
-	"log"
+	"go/types"
 	"os"
 
 	"github.com/bradleyfalzon/closecheck"
@@ -10,40 +11,63 @@ import (
 )
 
 func main() {
+
+	hideErr := flag.Bool("hide-errors", false, "Skip and hide any parsing errors encountered when checking package")
+	flag.Parse()
+
 	var conf loader.Config
-	if _, err := conf.FromArgs(os.Args[1:], true); err != nil {
-		log.Fatalf("Could not check %v: %s\n", os.Args[1:], err)
+	if _, err := conf.FromArgs(flag.Args(), true); err != nil {
+		fmt.Fprintf(os.Stderr, "Could not check %v: %s\n", os.Args[1:], err)
+		os.Exit(1)
+	}
+
+	conf.TypeChecker = types.Config{
+		Error: func(err error) {
+			if !*hideErr {
+				fmt.Fprintf(os.Stderr, "%s\n", err)
+			}
+		},
 	}
 
 	prog, err := conf.Load()
 	if err != nil {
-		log.Fatalf("Could not check %v: %s\n", os.Args[1:], err)
+		if *hideErr {
+			return
+		}
+		fmt.Fprintf(os.Stderr, "Could not check %v: %s\n", os.Args[1:], err)
+		os.Exit(1)
 	}
 
 	var ok = true
 	for _, pi := range prog.Imported {
 		if pi.Errors != nil {
-			log.Println("Cannot check package:", pi.Pkg.Name())
+			if *hideErr {
+				continue
+			}
+			fmt.Fprintf(os.Stderr, "Cannot check package: %s\n", pi.Pkg.Name())
 			for _, err := range pi.Errors {
-				log.Printf("\t%s\n", err)
+				fmt.Fprintf(os.Stderr, "\t%s\n", err)
 			}
 			os.Exit(1)
 		}
 
 		if !pi.TransitivelyErrorFree {
-			log.Fatalf("Cannot check package %s: not error free", pi.Pkg.Name())
+			if *hideErr {
+				continue
+			}
+			fmt.Fprintf(os.Stderr, "Cannot check package %s: not error free\n", pi.Pkg.Name())
+			os.Exit(1)
 		}
 
 		notClosed := closecheck.Check(prog, pi)
 		for _, obj := range notClosed {
 			ok = false
-			// TODO add ident (or line?)
 			// TODO add relative path not abs
 			fmt.Fprintf(os.Stderr, "%s: is not closed\n", prog.Fset.Position(obj.Pos()))
 		}
 	}
 
 	if !ok {
-		os.Exit(1)
+		os.Exit(2)
 	}
 }
