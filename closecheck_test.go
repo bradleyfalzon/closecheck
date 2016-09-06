@@ -17,7 +17,7 @@ func TestCheck(t *testing.T) {
 
 	// List of positions to be closed, only presence is necessary
 	expected := map[token.Pos]bool{
-		345: true, 423: true, 510: true,
+		357: true, 435: true, 522: true,
 	}
 
 	objs := Check(prog, prog.Created[0])

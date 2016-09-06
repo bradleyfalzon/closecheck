@@ -2,6 +2,7 @@ package testdata
 
 import (
 	"io"
+	"net/http"
 	"os"
 )
 
@@ -74,6 +75,12 @@ func testdata1() {
 		var file *os.File
 		(file), _ = os.Open("/tmp/closecheck")
 		file.Close()
+	}
+
+	{
+		// Testing selectorExpr.selectorExpr, not http.Response special handling
+		r := http.Response{}
+		r.Body.Close()
 	}
 }
 

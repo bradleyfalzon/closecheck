@@ -251,7 +251,7 @@ func (v *visitor) exprDef(e ast.Expr) types.Object {
 	case *ast.StarExpr:
 		return v.exprDef(f.X)
 	case *ast.SelectorExpr:
-		return v.pi.ObjectOf(f.Sel)
+		return v.exprDef(f.X)
 	case *ast.IndexExpr:
 		return v.exprDef(f.X)
 	case *ast.CallExpr:
