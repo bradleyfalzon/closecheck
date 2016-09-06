@@ -259,7 +259,7 @@ func (v *visitor) exprDef(e ast.Expr) types.Object {
 	case *ast.Ident:
 		return v.pi.ObjectOf(f)
 	default:
-		panic(fmt.Sprintf("unexpected type %T", e))
+		panic(fmt.Sprintf("unexpected type %T at %s", e, v.lprog.Fset.Position(e.Pos())))
 	}
 }
 
