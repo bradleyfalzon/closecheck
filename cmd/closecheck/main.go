@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/bradleyfalzon/closecheck"
+	"github.com/kisielk/gotool"
 	"golang.org/x/tools/go/loader"
 )
 
@@ -15,8 +16,11 @@ func main() {
 	hideErr := flag.Bool("hide-errors", false, "Skip and hide any parsing errors encountered when checking package")
 	flag.Parse()
 
+	// Use gotool to default blank import path to "." and handle recursion
+	paths := gotool.ImportPaths(flag.Args())
+
 	var conf loader.Config
-	if _, err := conf.FromArgs(flag.Args(), true); err != nil {
+	if _, err := conf.FromArgs(paths, true); err != nil {
 		fmt.Fprintf(os.Stderr, "Could not check %v: %s\n", os.Args[1:], err)
 		os.Exit(1)
 	}
