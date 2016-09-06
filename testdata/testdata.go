@@ -39,6 +39,12 @@ func testdata1() {
 	}
 
 	{
+		// Not closed
+		file, _ := os.Open("/tmp/closecheck")
+		_ = file
+	}
+
+	{
 		file, _ := os.Open("/tmp/closecheck")
 		osFile(file)
 	}
@@ -61,6 +67,13 @@ func testdata1() {
 		var file *os.File
 		file, _ = os.Open("/tmp/closecheck")
 		defer file.Close()
+	}
+
+	{
+		// ParenExpr
+		var file *os.File
+		(file), _ = os.Open("/tmp/closecheck")
+		file.Close()
 	}
 }
 
