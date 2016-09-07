@@ -63,7 +63,8 @@ func main() {
 			os.Exit(1)
 		}
 
-		notClosed := closecheck.Check(prog, pi)
+		c := closecheck.New()
+		notClosed := c.Check(prog, pi)
 		for _, obj := range notClosed {
 			ok = false
 			// TODO add relative path not abs

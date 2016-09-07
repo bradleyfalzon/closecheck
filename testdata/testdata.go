@@ -1,95 +1,57 @@
 package testdata
 
-import (
-	"io"
-	"net/http"
-	"os"
-)
+import "os"
 
 func testdata1() {
 	{
-		file, _ := os.Open("/tmp/closecheck")
-		_ = file.Close()
+		f, _ := os.Open("/tmp/closecheck") // closed
+		_ = f.Close()
 	}
 
 	{
-		file, _ := os.Open("/tmp/closecheck")
-		defer file.Close()
+		f, _ := os.Open("/tmp/closecheck") // closed
+		defer f.Close()
 	}
 
 	{
-		file, _ := os.Open("/tmp/closecheck")
-		closer(file)
-	}
-
-	{
-		file, _ := os.Open("/tmp/closecheck")
-		readCloser(file)
-	}
-
-	{
-		// Not closed
-		file, _ := os.Open("/tmp/closecheck")
-		reader(file)
-	}
-
-	{
-		// Not closed
-		file, _ := os.Open("/tmp/closecheck")
-		osFileNotClosed(file)
-	}
-
-	{
-		// Not closed
-		file, _ := os.Open("/tmp/closecheck")
-		_ = file
-	}
-
-	{
-		file, _ := os.Open("/tmp/closecheck")
-		osFile(file)
-	}
-
-	{
-		file, _ := os.Open("/tmp/closecheck")
-		go func(f *os.File) {
+		f, _ := os.Open("/tmp/closecheck") // closed
+		go func() {
 			f.Close()
-		}(file)
+		}()
 	}
 
 	{
-		file, _ := os.Open("/tmp/closecheck")
-		go func(f *os.File) {
-			osFile(f)
-		}(file)
+		f, _ := os.Open("/tmp/closecheck") // funcArg
+		osFile(f)
 	}
 
 	{
-		var file *os.File
-		file, _ = os.Open("/tmp/closecheck")
-		defer file.Close()
+		f, _ := os.Open("/tmp/closecheck") // open
+		_ = f
 	}
 
-	{
-		// ParenExpr
-		var file *os.File
-		(file), _ = os.Open("/tmp/closecheck")
-		file.Close()
-	}
-
-	{
-		// Testing selectorExpr.selectorExpr, not http.Response special handling
-		// and specifically we don't track closing of struct members
-		r := http.Response{}
-		r.Body.Close()
-	}
+	return // test handling return with no argument
 }
 
-var _ io.Closer = (*os.File)(nil) // test don't panic
+func testdata2() *os.File {
+	f, _ := os.Open("/tmp/closecheck") // returnArg
+	return f
+}
 
-// funcs of various kinds
-func closer(_ io.Closer)         {}
-func readCloser(_ io.ReadCloser) {}
-func reader(_ io.Reader)         {} // does not close
-func osFileNotClosed(_ *os.File) {} // does not close
-func osFile(f *os.File)          { _ = f.Close() }
+func testdata3() string {
+	f, _ := os.Open("/tmp/closecheck") // open
+	_ = f
+	return "" // test handling non ident argument
+}
+
+// TODO
+//func testdata4() (f *os.File) { // returnArg
+//f, _ = os.Open("/tmp/closecheck")
+//return
+//}
+
+type S struct {
+	f *os.File
+}
+
+func osFile(f *os.File) {}
