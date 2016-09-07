@@ -211,6 +211,12 @@ func (v *visitor) Visit(node ast.Node) ast.Visitor {
 			if fun.Sel.Name == "Close" {
 				// selector is a close, note the ident that's closed
 
+				if _, ok := fun.X.(*ast.SelectorExpr); ok {
+					// struct.Member.Close(), we don't handle tracking which members need
+					// to be closed
+					break
+				}
+
 				// Anything defined at def.Pos() is closed
 				def := v.exprDef(fun.X)
 				v.addClosed(def.Pos())
@@ -260,9 +266,8 @@ func (v *visitor) exprDef(e ast.Expr) types.Object {
 		return v.pi.ObjectOf(f)
 	case *ast.ParenExpr:
 		return v.exprDef(f.X)
-	default:
-		panic(fmt.Sprintf("unexpected type %T at %s", e, v.lprog.Fset.Position(e.Pos())))
 	}
+	panic(fmt.Sprintf("unexpected type %T at %s", e, v.lprog.Fset.Position(e.Pos())))
 }
 
 // Given a ast.CallExpr find the ident of the function being called

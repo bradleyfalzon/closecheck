@@ -79,6 +79,7 @@ func testdata1() {
 
 	{
 		// Testing selectorExpr.selectorExpr, not http.Response special handling
+		// and specifically we don't track closing of struct members
 		r := http.Response{}
 		r.Body.Close()
 	}
