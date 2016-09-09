@@ -23,7 +23,12 @@ func TestCheck(t *testing.T) {
 	c := New()
 	notClosed := c.Check(prog, prog.Created[0])
 
+	if len(c.objs) == 0 {
+		t.Fatal("no objects found")
+	}
+
 	for _, obj := range c.objs {
+		pos := c.lprog.Fset.Position(obj.node.Pos())
 
 		cmt := cmap[obj.node]
 		switch cmt[0].List[0].Text {
@@ -32,7 +37,7 @@ func TestCheck(t *testing.T) {
 			_ = notClosed
 			for _, ncObj := range notClosed {
 				if ncObj.node == obj.node {
-					t.Errorf("not closed when should be")
+					t.Errorf("%v not closed when should be", pos)
 				}
 			}
 		case "// open":
@@ -43,24 +48,20 @@ func TestCheck(t *testing.T) {
 				}
 			}
 			if !seen {
-				t.Errorf("not in not closed when should be")
+				t.Errorf("%v not in not closed when should be", pos)
+			}
+		case "// returnArg":
+			// find it in returnArgs
+			if _, ok := c.returnArgs[obj.id]; !ok {
+				t.Errorf("%v not in returnArgs", pos)
+			}
+		case "// funcArg":
+			// find it in funcArgs
+			if _, ok := c.funcArgs[obj.id]; !ok {
+				t.Errorf("%v not in funcArgs", pos)
 			}
 		default:
-			// make sure it was returned in notClosed
-			switch cmt[0].List[0].Text {
-			case "// returnArg":
-				// find it in returnArgs
-				if _, ok := c.returnArgs[obj.node.Pos()]; !ok {
-					t.Errorf("not in returnArgs")
-				}
-			case "// funcArg":
-				// find it in funcArgs
-				if _, ok := c.funcArgs[obj.node.Pos()]; !ok {
-					t.Errorf("not in funcArgs")
-				}
-			default:
-				panic(fmt.Sprintf("unknown comment: %q", cmt[0].List[0].Text))
-			}
+			panic(fmt.Sprintf("%v unknown comment: %q", pos, cmt[0].List[0].Text))
 		}
 	}
 }
