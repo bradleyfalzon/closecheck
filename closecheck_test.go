@@ -52,14 +52,14 @@ func TestCheck(t *testing.T) {
 			}
 		case "// returnArg":
 			// find it in returnArgs
-			if _, ok := c.returnArgs[obj.id]; !ok {
+			if _, ok := c.returnArgs[obj.pos]; !ok {
 				t.Errorf("%v not in returnArgs", pos)
 			}
 		case "// funcArg":
 			// find it in funcArgs
-			//if _, ok := c.funcArgs[obj.id]; !ok {
-			//t.Errorf("%v not in funcArgs", pos)
-			//}
+			if _, ok := c.funcArgs[obj.pos]; !ok {
+				t.Errorf("%v not in funcArgs", pos)
+			}
 		default:
 			panic(fmt.Sprintf("%v unknown comment: %q", pos, cmt[0].List[0].Text))
 		}

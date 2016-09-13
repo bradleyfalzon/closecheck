@@ -67,6 +67,12 @@ func testdata1() {
 		osFile(s.m1)
 	}
 
+	{
+		s := S{}
+		s.m1, _ = os.Open("/tmp/closecheck") // funcArg
+		osFile2(s)
+	}
+
 	return // test handling return with no argument
 }
 
@@ -90,9 +96,22 @@ func testdata5(f *os.File) {
 	f, _ = os.Open("/tmp/closecheck") // funcArg
 }
 
+func testdata6() S {
+	s := S{}
+	s.m1, _ = os.Open("/tmp/closecheck") // returnArg
+	return s
+}
+
+func testdata7() *os.File {
+	s := S{}
+	s.m1, _ = os.Open("/tmp/closecheck") // returnArg
+	return s.m1
+}
+
 type S struct {
 	m1 *os.File
 	m2 *os.File
 }
 
 func osFile(f *os.File) {}
+func osFile2(f S)       {}
