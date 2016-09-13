@@ -30,29 +30,42 @@ func testdata1() {
 		_ = f
 	}
 
-	//{
-	//s := S{}
-	//s.m1, _ = os.Open("/tmp/closecheck") // open
-	//}
+	{
+		s := S{}
+		s.m1, _ = os.Open("/tmp/closecheck") // open
+	}
 
-	//{
-	//s := S{}
-	//s.m1, _ = os.Open("/tmp/closecheck") // closed
-	//s.m2, _ = os.Open("/tmp/closecheck") // open
-	//s.m2, _ = os.Open("/tmp/closecheck") // open
-	//s.m1.Close()
+	{
+		s := S{}
+		s.m1, _ = os.Open("/tmp/closecheck") // closed
+		s.m1.Close()
+	}
 
-	//s1 := S{}
-	//s1.m1, _ = os.Open("/tmp/closecheck") // open
-	//s1.m2, _ = os.Open("/tmp/closecheck") // closed
-	//s1.m2.Close()
-	//}
+	{
+		s := S{}
+		s.m1, _ = os.Open("/tmp/closecheck") // closed
+		s.m2, _ = os.Open("/tmp/closecheck") // open
+		s.m1.Close()
+	}
 
-	//{
-	//s := S{}
-	//s.m1, _ = os.Open("/tmp/closecheck") // funcArg
-	//osFile(s.m1)
-	//}
+	{
+		s := S{}
+		s.m1, _ = os.Open("/tmp/closecheck") // closed
+		s.m2, _ = os.Open("/tmp/closecheck") // open
+		s.m2, _ = os.Open("/tmp/closecheck") // open
+		s.m1.Close()
+
+		s1 := S{}
+		s1.m1, _ = os.Open("/tmp/closecheck") // open
+		s1.m2, _ = os.Open("/tmp/closecheck") // closed
+		s1.m2.Close()
+	}
+
+	{
+		s := S{}
+		s.m1, _ = os.Open("/tmp/closecheck") // funcArg
+		osFile(s.m1)
+	}
 
 	return // test handling return with no argument
 }
@@ -77,9 +90,9 @@ func testdata5(f *os.File) {
 	f, _ = os.Open("/tmp/closecheck") // funcArg
 }
 
-//type S struct {
-//m1 *os.File
-//m2 *os.File
-//}
+type S struct {
+	m1 *os.File
+	m2 *os.File
+}
 
 func osFile(f *os.File) {}
