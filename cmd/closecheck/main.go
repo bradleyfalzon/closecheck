@@ -14,6 +14,7 @@ import (
 func main() {
 
 	hideErr := flag.Bool("hide-errors", false, "Skip and hide any parsing errors encountered when checking package")
+	verbose := flag.Bool("v", false, "Show verbose debugging messages")
 	flag.Parse()
 
 	// Use gotool to default blank import path to "." and handle recursion
@@ -64,6 +65,7 @@ func main() {
 		}
 
 		c := closecheck.New()
+		c.Verbose = *verbose
 		notClosed := c.Check(prog, pi)
 		for _, obj := range notClosed {
 			ok = false

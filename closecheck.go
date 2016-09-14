@@ -5,6 +5,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"os"
 	"strconv"
 
 	"golang.org/x/tools/go/loader"
@@ -21,10 +22,11 @@ func init() {
 }
 
 type Checker struct {
-	lprog  *loader.Program
-	pi     *loader.PackageInfo
-	objs   []obj           // objects that need to be checked for closing
-	closed map[string]bool // closers closed, just the presence in map is checked
+	Verbose bool // Verbose mode prints debug messages to output
+	lprog   *loader.Program
+	pi      *loader.PackageInfo
+	objs    []obj           // objects that need to be checked for closing
+	closed  map[string]bool // closers closed, just the presence in map is checked
 	// funcArgs contains all ident definition positions that are used in function args
 	// uses the definition's token.Pos and ignores any selector indexes
 	funcArgs map[token.Pos]bool
@@ -38,6 +40,12 @@ func New() *Checker {
 		closed:     make(map[string]bool),
 		funcArgs:   make(map[token.Pos]bool),
 		returnArgs: make(map[token.Pos]bool),
+	}
+}
+
+func (c *Checker) vlogf(format string, args ...interface{}) {
+	if c.Verbose {
+		fmt.Fprintf(os.Stdout, format, args...)
 	}
 }
 
@@ -68,44 +76,44 @@ func (o obj) Pos() token.Pos {
 }
 
 func (c *Checker) track(pos token.Pos, index []int, node ast.Node) {
-	fmt.Printf("%v tracking\n", c.lprog.Fset.Position(pos))
+	c.vlogf("%v tracking\n", c.lprog.Fset.Position(pos))
 	c.objs = append(c.objs, obj{makeID(pos, index), pos, node})
 }
 
 //func (c *Checker) addFuncArg(id string) {
 func (c *Checker) addFuncArg(pos token.Pos) {
-	fmt.Printf("%v adding func arg\n", c.lprog.Fset.Position(pos))
+	c.vlogf("%v adding func arg\n", c.lprog.Fset.Position(pos))
 	c.funcArgs[pos] = true
 }
 
 //func (c *Checker) addReturnArg(id string) {
 func (c *Checker) addReturnArg(pos token.Pos) {
-	fmt.Printf("%v adding return arg\n", c.lprog.Fset.Position(pos))
+	c.vlogf("%v adding return arg\n", c.lprog.Fset.Position(pos))
 	c.returnArgs[pos] = true
 }
 
 func (c *Checker) addClosed(pos token.Pos, index []int) {
 	id := makeID(pos, index)
-	fmt.Printf("%v adding closed id %v\n", c.lprog.Fset.Position(pos), id)
+	c.vlogf("%v adding closed id %v\n", c.lprog.Fset.Position(pos), id)
 	c.closed[id] = true
 }
 
 func (c *Checker) notClosed() (objs []obj) {
-	fmt.Printf("Checking...\n")
+	c.vlogf("Checking...\n")
 	for _, obj := range c.objs {
 		// explicitly closed
 		if _, ok := c.closed[obj.id]; ok {
-			fmt.Printf("%v closed\n", c.lprog.Fset.Position(obj.node.Pos()))
+			c.vlogf("%v closed\n", c.lprog.Fset.Position(obj.node.Pos()))
 			continue
 		}
 		// return argument
 		if _, ok := c.returnArgs[obj.pos]; ok {
-			fmt.Printf("%v return arguments are ignored\n", c.lprog.Fset.Position(obj.node.Pos()))
+			c.vlogf("%v return arguments are ignored\n", c.lprog.Fset.Position(obj.node.Pos()))
 			continue
 		}
 		// function argument
 		if _, ok := c.funcArgs[obj.pos]; ok {
-			fmt.Printf("%v function arguments are ignored\n", c.lprog.Fset.Position(obj.node.Pos()))
+			c.vlogf("%v function arguments are ignored\n", c.lprog.Fset.Position(obj.node.Pos()))
 			continue
 		}
 		// not closed
@@ -135,7 +143,7 @@ func (c *Checker) Visit(node ast.Node) ast.Visitor {
 				// selector is a close, note the ident that's closed
 				pos, index, _, ok := c.resolveExpr(fun.X)
 				if !ok {
-					fmt.Printf("%v unsupported type on Close method %T\n", c.lprog.Fset.Position(fun.X.Pos()), fun.X)
+					c.vlogf("%v unsupported type on Close method %T\n", c.lprog.Fset.Position(fun.X.Pos()), fun.X)
 					break
 				}
 				c.addClosed(pos, index)
@@ -146,7 +154,7 @@ func (c *Checker) Visit(node ast.Node) ast.Visitor {
 		for _, arg := range n.Args {
 			pos, _, _, ok := c.resolveExpr(arg)
 			if !ok {
-				fmt.Printf("%v unsupported type in CallExpr %T\n", c.lprog.Fset.Position(arg.Pos()), arg)
+				c.vlogf("%v unsupported type in CallExpr %T\n", c.lprog.Fset.Position(arg.Pos()), arg)
 				break
 			}
 			c.addFuncArg(pos)
@@ -158,7 +166,7 @@ func (c *Checker) Visit(node ast.Node) ast.Visitor {
 			for _, ident := range arg.Names {
 				pos, _, _, ok := c.resolveExpr(ident)
 				if !ok {
-					fmt.Printf("%v unsupported type %T\n", c.lprog.Fset.Position(ident.Pos()), ident)
+					c.vlogf("%v unsupported type %T\n", c.lprog.Fset.Position(ident.Pos()), ident)
 					break
 				}
 				c.addFuncArg(pos)
@@ -170,7 +178,7 @@ func (c *Checker) Visit(node ast.Node) ast.Visitor {
 				for _, ident := range arg.Names {
 					pos, _, _, ok := c.resolveExpr(ident)
 					if !ok {
-						fmt.Printf("%v unsupported type %T\n", c.lprog.Fset.Position(ident.Pos()), ident)
+						c.vlogf("%v unsupported type %T\n", c.lprog.Fset.Position(ident.Pos()), ident)
 						break
 					}
 					c.addReturnArg(pos)
@@ -186,7 +194,7 @@ func (c *Checker) Visit(node ast.Node) ast.Visitor {
 		for _, arg := range n.Results {
 			pos, _, _, ok := c.resolveExpr(arg)
 			if !ok {
-				fmt.Printf("%v unsupported type %T", c.lprog.Fset.Position(arg.Pos()), arg)
+				c.vlogf("%v unsupported type %T", c.lprog.Fset.Position(arg.Pos()), arg)
 				break
 			}
 			c.addReturnArg(pos)
