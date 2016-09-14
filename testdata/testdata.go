@@ -1,6 +1,9 @@
 package testdata
 
-import "os"
+import (
+	"fmt"
+	"os"
+)
 
 func testdata1() {
 	{
@@ -108,9 +111,16 @@ func testdata7() *os.File {
 	return s.m1
 }
 
+func testdata8() {
+	fmt.Fprint(os.Stdout, "")
+	s := S{}
+	s.m3[0].m1, _ = os.Open("/tmp/closecheck") // handle panic on selectorExpr.X.(*ast.IndexExpr)
+}
+
 type S struct {
 	m1 *os.File
 	m2 *os.File
+	m3 []S
 }
 
 func osFile(f *os.File) {}

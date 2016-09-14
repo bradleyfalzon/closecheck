@@ -207,31 +207,35 @@ func (c *Checker) exprDef(e ast.Expr) types.Object {
 	case *ast.Ident:
 		return c.pi.ObjectOf(f)
 	}
-	panic(fmt.Sprintf("unexpected type %T at %s", e, c.lprog.Fset.Position(e.Pos())))
+	return nil
 }
 
 // resolveExpr returns a unique identifier and typ given an ast.Expr for a
 // subset of supported types. If the type is unsupported, ok is set to false,
 // and no other return values are valid, else ok is set to true.
 func (c *Checker) resolveExpr(e ast.Expr) (pos token.Pos, index []int, typ types.Type, ok bool) {
-	var (
-		def types.Object
-	)
+	def := c.exprDef(e)
+	if def == nil {
+		return pos, index, typ, false
+	}
+
 	switch etype := e.(type) {
 	case *ast.Ident:
 		if etype.Name == "_" {
 			return pos, index, typ, false
 		}
-		def = c.exprDef(e)
 		typ = def.Type()
 	case *ast.SelectorExpr:
-		def = c.exprDef(e)
+		if _, ok := c.pi.Selections[etype]; !ok {
+			return pos, index, typ, false
+		}
 		typ = c.pi.Selections[etype].Obj().Type()
 		index = c.pi.Selections[etype].Index()
 	default:
 		// Unsupported type
 		return pos, index, typ, false
 	}
+
 	return def.Pos(), index, typ, true
 }
 
