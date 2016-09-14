@@ -21,6 +21,7 @@ func TestCheck(t *testing.T) {
 	cmap := ast.NewCommentMap(prog.Fset, prog.Created[0].Files[0], prog.Created[0].Files[0].Comments)
 
 	c := New()
+	c.Verbose = true
 	notClosed := c.Check(prog, prog.Created[0])
 
 	if len(c.objs) == 0 {

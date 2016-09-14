@@ -112,9 +112,18 @@ func testdata7() *os.File {
 }
 
 func testdata8() {
-	fmt.Fprint(os.Stdout, "")
+	fmt.Fprint(os.Stdout, "") // handle panic
 	s := S{}
 	s.m3[0].m1, _ = os.Open("/tmp/closecheck") // handle panic on selectorExpr.X.(*ast.IndexExpr)
+}
+
+func testdata9() {
+	fmt.Fprint(os.Stdout, "")
+	f, _ := os.Open("/tmp/closecheck") // funcArg
+	s := S{
+		m1: f,
+	}
+	osFile2(s)
 }
 
 type S struct {
